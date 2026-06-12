@@ -99,7 +99,9 @@
   .cross .ret::before,.cross .ret::after{content:"";position:absolute;background:var(--red);}
   .cross .ret::before{left:50%;top:-9px;bottom:-9px;width:2px;transform:translateX(-1px);}
   .cross .ret::after{top:50%;left:-9px;right:-9px;height:2px;transform:translateY(-1px);}
-  .cross .dot{position:absolute;left:50%;top:50%;width:9px;height:9px;background:var(--red);border-radius:50%;transform:translate(-50%,-50%);}
+  .cross .dot{position:absolute;left:50%;top:50%;width:9px;height:9px;background:var(--red);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;}
+  .cross.on .ret{pointer-events:auto;cursor:move;touch-action:none;}
+  .cross.on .ret:hover{box-shadow:0 0 0 3px rgba(214,32,42,.25);}
 
   /* sub images row (全体像・別角度 等) */
   .subImages{grid-column:1;grid-row:3;display:flex;gap:10px;height:210px;}
@@ -174,8 +176,10 @@
     body{background:#fff;}
     #toolbar,#library,#hint{display:none !important;}
     #canvasWrap{padding:0;overflow:visible;}
-    #card{box-shadow:none;border:none;position:fixed;top:0;left:0;
-      transform:scale(0.7632);transform-origin:top left;}
+    /* A5横の印刷可能領域に安全マージン付きで収め、ページ中央に配置
+       （端まで拡大するとプリンタの物理余白で下端等が切れるため少し縮小） */
+    #card{box-shadow:none;border:none;position:fixed;top:50%;left:50%;
+      transform:translate(-50%,-50%) scale(0.70);transform-origin:center center;}
     .imgslot{border:none;}
     .edit:hover,[contenteditable]:focus{box-shadow:none;background:none;}
     .pt .rm,.addPt,.subRm,.subAdd{display:none !important;}
@@ -263,7 +267,7 @@
         </div>
       </div>
     </div>
-    <div id="hint">テキストは直接クリックして編集 ／ 画像枠はクリックまたはドラッグ&ドロップで差し替え ／ 「保存」で一覧に追加されます</div>
+    <div id="hint">テキストは直接クリックして編集 ／ 画像枠はクリックまたはドラッグ&ドロップで差し替え ／ <b>赤い＋（照射点）はドラッグで位置調整</b> ／ 「保存」で一覧に追加されます</div>
   </div>
 </div>
 
@@ -278,7 +282,7 @@ function blankState(){
     id:null, name:"",
     number:"", title:"", caption:"X線<br>垂直入射",
     centerTitle:"中心線", centerBody:"", angle:"0°", sid:"100 cm", refTitle:"参考X線画像",
-    points:[""], orient:"v", showCross:true,
+    points:[""], orient:"v", showCross:true, crossX:50, crossY:50,
     subImages:[{caption:"全体像",img:null},{caption:"別角度",img:null}],
     mainImg:null, refImg:null
   };
@@ -363,8 +367,34 @@ function render(){
   renderBucky();
   $("#cross").classList.toggle("on",!!state.showCross);
   $("#crossChk").checked=!!state.showCross;
+  applyCross();
   $("#cardName").value=state.name||"";
 }
+/* ----- 照射フォーカスポイント（赤い＋）の位置反映 + ドラッグ調整 ----- */
+function applyCross(){
+  const x=(state.crossX??50)+"%", y=(state.crossY??50)+"%";
+  const cr=$("#cross");
+  cr.querySelector(".vline").style.left=x;
+  const ret=cr.querySelector(".ret");ret.style.left=x;ret.style.top=y;
+  const dot=cr.querySelector(".dot");dot.style.left=x;dot.style.top=y;
+}
+(function initCrossDrag(){
+  const cross=document.querySelector("#cross");
+  const ret=cross.querySelector(".ret");
+  const clamp=v=>Math.max(0,Math.min(100,Math.round(v*10)/10));
+  ret.addEventListener("pointerdown",e=>{
+    if(!state.showCross)return;
+    e.preventDefault();e.stopPropagation();
+    const rect=cross.getBoundingClientRect();
+    const move=ev=>{
+      state.crossX=clamp((ev.clientX-rect.left)/rect.width*100);
+      state.crossY=clamp((ev.clientY-rect.top)/rect.height*100);
+      applyCross();
+    };
+    const up=()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up);};
+    window.addEventListener("pointermove",move);window.addEventListener("pointerup",up);
+  });
+})();
 function paintSlot(slot,val){
   slot.innerHTML = val ? `<img src="${val}">` : `<div class="ph">${slot.dataset.ph||""}</div>`;
 }
