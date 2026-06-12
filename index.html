@@ -61,18 +61,19 @@
 
   #canvasWrap{flex:1;display:flex;justify-content:center;padding:24px;overflow:auto;}
 
-  /* ===== THE CARD ===== */
+  /* ===== THE CARD =====
+     html2canvas は CSS Grid を正しく描画できないため Flexbox で構成する */
   #card{width:var(--cardW);height:var(--cardH);background:#fff;flex:none;
-    display:grid;grid-template-columns:1fr 286px;grid-template-rows:auto 1fr auto;
-    gap:10px;padding:14px 16px;border:1px solid #ddd;box-shadow:0 4px 18px rgba(0,0,0,.12);
+    display:flex;gap:10px;padding:14px 16px;border:1px solid #ddd;box-shadow:0 4px 18px rgba(0,0,0,.12);
     position:relative;}
+  .leftcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:10px;}
 
   [contenteditable]{outline:none;}
   [contenteditable]:focus{background:#fff7d6;border-radius:4px;}
   .edit:hover{box-shadow:0 0 0 2px #ffe27a inset;border-radius:4px;}
 
   /* header */
-  .hdr{grid-column:1;grid-row:1;display:flex;align-items:flex-start;gap:14px;}
+  .hdr{flex:none;display:flex;align-items:flex-start;gap:14px;}
   .num{background:var(--navy);color:#fff;font-weight:800;font-size:34px;line-height:1;
     padding:8px 14px;border-radius:10px;min-width:54px;text-align:center;}
   .title{font-size:40px;font-weight:800;letter-spacing:.5px;}
@@ -81,7 +82,7 @@
   .caption .ct{font-size:20px;font-weight:700;}
 
   /* main image */
-  .mainImg{grid-column:1;grid-row:2;position:relative;}
+  .mainImg{flex:1 1 0;min-height:0;position:relative;}
 
   .imgslot{position:relative;width:100%;height:100%;background:#f4f6f8;border:1px dashed #b9c2cd;
     border-radius:10px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;}
@@ -104,7 +105,7 @@
   .cross.on .ret:hover{box-shadow:0 0 0 3px rgba(214,32,42,.25);}
 
   /* sub images row (全体像・別角度 等) */
-  .subImages{grid-column:1;grid-row:3;display:flex;gap:10px;height:210px;}
+  .subImages{flex:none;display:flex;gap:10px;height:210px;}
   .subItem{flex:1 1 0;min-width:0;border:1px solid #c4ccd6;border-radius:10px;padding:8px;
     position:relative;display:flex;flex-direction:column;}
   .subCap{position:absolute;top:-1px;left:-1px;color:#fff;background:var(--navy);font-size:14px;font-weight:700;
@@ -128,7 +129,7 @@
   .popover button:hover{background:#eaf2fc;}
 
   /* sidebar */
-  .side{grid-column:2;grid-row:1 / span 3;display:flex;flex-direction:column;gap:10px;}
+  .side{flex:none;width:286px;display:flex;flex-direction:column;gap:10px;}
   .box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;}
 
   .boxCenter{border:2px solid var(--red);}
@@ -214,6 +215,7 @@
   <div style="flex:1;">
     <div id="canvasWrap">
       <div id="card">
+       <div class="leftcol">
         <!-- header -->
         <div class="hdr">
           <div class="num edit" contenteditable data-f="number">9</div>
@@ -232,6 +234,7 @@
 
         <!-- sub images (全体像・別角度 など 自由に追加) -->
         <div class="subImages" id="subImages"></div>
+       </div><!-- /.leftcol -->
 
         <!-- sidebar -->
         <div class="side">
@@ -533,12 +536,14 @@ $("#pngBtn").addEventListener("click",async()=>{
   const btn=$("#pngBtn");const o=btn.textContent;btn.textContent="生成中…";
   const card=$("#card");
   document.activeElement.blur&&document.activeElement.blur();
+  document.body.classList.remove("editing"); // 書き出し中は編集ボタン(✕/＋)を隠す
   try{
     const canvas=await html2canvas(card,{scale:2.4,backgroundColor:"#ffffff",useCORS:true,logging:false});
     const a=document.createElement("a");
     a.download=(state.name||state.title||"positioning-card").replace(/[\\/:*?"<>|]/g,"_")+".png";
     a.href=canvas.toDataURL("image/png");a.click();
   }catch(err){alert("PNG生成に失敗しました: "+err.message);}
+  document.body.classList.add("editing");
   btn.textContent=o;
 });
 
