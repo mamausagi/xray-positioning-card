@@ -170,16 +170,19 @@
 
   #hint{font-size:13px;color:#667;padding:0 24px 20px;text-align:center;}
 
-  /* ===== print ===== */
+  /* ===== print =====
+     カード(1040x733px)を transform で縮小し、縮小後の実寸の枠(overflow:hidden)で
+     クリップする。これで「縮小しても元サイズの場所を確保してしまい改ページ/見切れ」
+     を防ぎ、A5横1ページに安全余白付きで収める。
+     scale 0.67 → 696.8 x 491.1px ＝ 約184 x 130mm。@page margin 8mm と合わせ四辺に余白。 */
   @media print{
-    @page{size:A5 landscape;margin:0;}
-    body{background:#fff;}
+    @page{size:A5 landscape;margin:8mm;}
+    html,body{background:#fff;margin:0;padding:0;}
     #toolbar,#library,#hint{display:none !important;}
-    #canvasWrap{padding:0;overflow:visible;}
-    /* A5横の印刷可能領域に安全マージン付きで収め、ページ中央に配置
-       （端まで拡大するとプリンタの物理余白で下端等が切れるため少し縮小） */
-    #card{box-shadow:none;border:none;position:fixed;top:50%;left:50%;
-      transform:translate(-50%,-50%) scale(0.70);transform-origin:center center;}
+    #stage{display:block;}
+    #stage>div{display:block;margin:0;padding:0;}
+    #canvasWrap{display:block;margin:0 auto;padding:0;overflow:hidden;width:697px;height:492px;}
+    #card{box-shadow:none;border:none;margin:0;transform:scale(0.67);transform-origin:top left;}
     .imgslot{border:none;}
     .edit:hover,[contenteditable]:focus{box-shadow:none;background:none;}
     .pt .rm,.addPt,.subRm,.subAdd{display:none !important;}
