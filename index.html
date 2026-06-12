@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>X-p ポジショニングカード作成</title>
+
+<!-- ===== PWA設定（ホーム画面アイコン対応） ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#143f7a">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+
+<!-- iOS Safari 用 -->
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="X-pカード">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<!-- 検索エンジン除外（院内ツール） -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+
+<script src="html2canvas.min.js"></script>
+<style>
+  :root{
+    --navy:#143f7a; --navy-d:#0f2f5c; --red:#d6202a; --green:#1f9d4d;
+    --ink:#1a1a1a; --line:#cfd6df; --bg:#eef1f5;
+    --cardW:1040px; --cardH:733px;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{margin:0;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;
+       background:var(--bg);color:var(--ink);}
+
+  /* ===== toolbar ===== */
+  #toolbar{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+    padding:10px 14px;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 1px 4px rgba(0,0,0,.06);}
+  #toolbar button{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);
+    background:#fff;cursor:pointer;white-space:nowrap;}
+  #toolbar button:hover{background:#f2f6fb;}
+  #toolbar button.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  #toolbar button.primary:hover{background:var(--navy-d);}
+  #toolbar .sp{flex:1;}
+  #toolbar label.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;}
+  #cardName{font:inherit;font-size:15px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px;}
+
+  /* ===== library drawer ===== */
+  #libBtn{position:relative;}
+  #stage{display:flex;gap:0;}
+  #library{width:0;overflow:hidden;transition:width .2s;background:#fff;border-right:1px solid var(--line);
+    min-height:calc(100vh - 56px);}
+  #library.open{width:260px;}
+  #libInner{width:260px;padding:14px;}
+  #libInner h2{font-size:15px;margin:0 0 10px;color:var(--navy);}
+  .libItem{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;}
+  .libItem:hover{background:#f2f6fb;}
+  .libItem .nm{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .libItem.active{border-color:var(--navy);background:#eaf2fc;}
+  .libItem .del{border:none;background:none;color:#b00;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:6px;}
+  .libItem .del:hover{background:#fdd;}
+  #libEmpty{color:#888;font-size:13px;}
+
+  #canvasWrap{flex:1;display:flex;justify-content:center;padding:24px;overflow:auto;}
+
+  /* ===== THE CARD ===== */
+  #card{width:var(--cardW);height:var(--cardH);background:#fff;flex:none;
+    display:grid;grid-template-columns:1fr 286px;grid-template-rows:auto 1fr auto;
+    gap:10px;padding:14px 16px;border:1px solid #ddd;box-shadow:0 4px 18px rgba(0,0,0,.12);
+    position:relative;}
+
+  [contenteditable]{outline:none;}
+  [contenteditable]:focus{background:#fff7d6;border-radius:4px;}
+  .edit:hover{box-shadow:0 0 0 2px #ffe27a inset;border-radius:4px;}
+
+  /* header */
+  .hdr{grid-column:1;grid-row:1;display:flex;align-items:flex-start;gap:14px;}
+  .num{background:var(--navy);color:#fff;font-weight:800;font-size:34px;line-height:1;
+    padding:8px 14px;border-radius:10px;min-width:54px;text-align:center;}
+  .title{font-size:40px;font-weight:800;letter-spacing:.5px;}
+  .caption{margin-left:auto;text-align:center;line-height:1.15;padding-right:30px;}
+  .arrow{color:var(--red);font-size:30px;line-height:.7;}
+  .caption .ct{font-size:20px;font-weight:700;}
+
+  /* main image */
+  .mainImg{grid-column:1;grid-row:2;position:relative;}
+
+  .imgslot{position:relative;width:100%;height:100%;background:#f4f6f8;border:1px dashed #b9c2cd;
+    border-radius:10px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .imgslot img{width:100%;height:100%;object-fit:contain;display:block;}
+  .imgslot .ph{color:#9aa6b2;font-size:13px;text-align:center;pointer-events:none;padding:8px;}
+  .imgslot.drag{border-color:var(--navy);background:#eaf2fc;}
+
+  /* crosshair overlay */
+  .cross{position:absolute;inset:0;pointer-events:none;display:none;}
+  .cross.on{display:block;}
+  .cross .vline{position:absolute;top:0;bottom:0;left:50%;width:0;
+    border-left:2px dashed var(--red);transform:translateX(-1px);}
+  .cross .ret{position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);
+    border:3px solid var(--red);border-radius:50%;}
+  .cross .ret::before,.cross .ret::after{content:"";position:absolute;background:var(--red);}
+  .cross .ret::before{left:50%;top:-9px;bottom:-9px;width:2px;transform:translateX(-1px);}
+  .cross .ret::after{top:50%;left:-9px;right:-9px;height:2px;transform:translateY(-1px);}
+  .cross .dot{position:absolute;left:50%;top:50%;width:9px;height:9px;background:var(--red);border-radius:50%;transform:translate(-50%,-50%);}
+
+  /* sub images row (全体像・別角度 等) */
+  .subImages{grid-column:1;grid-row:3;display:flex;gap:10px;height:210px;}
+  .subItem{flex:1 1 0;min-width:0;border:1px solid #c4ccd6;border-radius:10px;padding:8px;
+    position:relative;display:flex;flex-direction:column;}
+  .subCap{position:absolute;top:-1px;left:-1px;color:#fff;background:var(--navy);font-size:14px;font-weight:700;
+    padding:4px 12px;border-radius:9px 0 9px 0;min-width:40px;max-width:80%;}
+  .subRm{position:absolute;top:5px;right:5px;display:none;border:none;background:rgba(255,255,255,.88);
+    color:#b00;border-radius:6px;cursor:pointer;font-size:13px;line-height:1;padding:3px 7px;z-index:3;}
+  .editing .subRm{display:block;}
+  .subBody{flex:1;margin-top:30px;}
+  .subBody .imgslot{height:100%;}
+  .subAdd{flex:none;width:46px;border:1px dashed var(--navy);border-radius:10px;background:#f4f8fd;
+    color:var(--navy);font-size:24px;cursor:pointer;display:none;align-items:center;justify-content:center;}
+  .editing .subAdd{display:flex;}
+
+  /* template popover */
+  .popover{position:absolute;background:#fff;border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 8px 26px rgba(0,0,0,.16);padding:6px;display:none;z-index:200;max-height:74vh;overflow:auto;min-width:200px;}
+  .popover.open{display:block;}
+  .popover .ph2{font-size:11px;color:#8a93a0;padding:6px 10px 3px;}
+  .popover button{display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;
+    border-radius:6px;font:inherit;font-size:14px;cursor:pointer;white-space:nowrap;}
+  .popover button:hover{background:#eaf2fc;}
+
+  /* sidebar */
+  .side{grid-column:2;grid-row:1 / span 3;display:flex;flex-direction:column;gap:10px;}
+  .box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;}
+
+  .boxCenter{border:2px solid var(--red);}
+  .boxCenter .bh{color:var(--red);font-weight:800;font-size:19px;text-align:center;margin-bottom:4px;}
+  .boxCenter .bb{text-align:center;font-size:15px;line-height:1.4;}
+
+  .pill{display:inline-block;background:var(--navy);color:#fff;font-weight:700;font-size:15px;
+    padding:3px 14px;border-radius:7px;}
+  .pill.red{background:var(--red);}
+
+  .boxBucky{display:flex;flex-direction:column;gap:8px;}
+  .buckyRow{display:flex;align-items:center;gap:10px;}
+  .cassette{flex:none;}
+  .cassette svg{display:block;}
+  .buckyOrient{font-size:15px;font-weight:600;}
+  .buckyAngle{margin-left:auto;font-size:16px;font-weight:700;}
+  .miniBtn{font:inherit;font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;}
+
+  .boxSID{text-align:center;}
+  .boxSID .bh{color:var(--navy);font-weight:800;font-size:18px;letter-spacing:1px;}
+  .boxSID .bb{font-size:26px;font-weight:800;margin-top:2px;}
+
+  .boxPoint{background:#f1faf3;border-color:#bfe6cb;flex:none;}
+  .boxPoint .bh{color:var(--green);font-weight:800;font-size:17px;margin-bottom:6px;}
+  .pt{display:flex;gap:7px;align-items:flex-start;font-size:13.5px;line-height:1.35;margin-bottom:5px;}
+  .pt .ck{color:var(--green);font-weight:900;flex:none;}
+  .pt .tx{flex:1;}
+  .pt .rm{display:none;border:none;background:none;color:#b00;cursor:pointer;font-size:13px;}
+  .editing .pt .rm{display:inline;}
+  .addPt{display:none;font:inherit;font-size:12px;color:var(--green);background:none;border:1px dashed var(--green);
+    border-radius:6px;padding:3px 8px;cursor:pointer;margin-top:2px;}
+  .editing .addPt{display:inline-block;}
+
+  .boxRef{flex:1;display:flex;flex-direction:column;padding:0;overflow:hidden;}
+  .boxRef .bh{background:var(--navy);color:#fff;text-align:center;font-weight:700;font-size:15px;padding:5px;}
+  .boxRef .refImg{flex:1;background:#000;}
+  .boxRef .imgslot{background:#000;border:none;border-radius:0;}
+  .boxRef .imgslot .ph{color:#888;}
+
+  #hint{font-size:13px;color:#667;padding:0 24px 20px;text-align:center;}
+
+  /* ===== print ===== */
+  @media print{
+    @page{size:A5 landscape;margin:0;}
+    body{background:#fff;}
+    #toolbar,#library,#hint{display:none !important;}
+    #canvasWrap{padding:0;overflow:visible;}
+    #card{box-shadow:none;border:none;position:fixed;top:0;left:0;
+      transform:scale(0.7632);transform-origin:top left;}
+    .imgslot{border:none;}
+    .edit:hover,[contenteditable]:focus{box-shadow:none;background:none;}
+    .pt .rm,.addPt,.subRm,.subAdd{display:none !important;}
+    .popover{display:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="libBtn">☰ 一覧</button>
+  <button id="newBtn">＋ 新規（雛形）▾</button>
+  <button id="dupBtn">⧉ 複製</button>
+  <div id="tplMenu" class="popover"></div>
+  <input id="cardName" placeholder="カード名（部位）">
+  <span class="sp"></span>
+  <label class="chk"><input type="checkbox" id="crossChk"> 中心線オーバーレイ</label>
+  <button id="saveBtn" class="primary">💾 保存</button>
+  <button id="pngBtn">🖼 PNG</button>
+  <button id="printBtn">🖨 印刷(A5)</button>
+</div>
+
+<div id="stage">
+  <aside id="library"><div id="libInner">
+    <h2>保存したカード</h2>
+    <div id="libList"></div>
+  </div></aside>
+
+  <div style="flex:1;">
+    <div id="canvasWrap">
+      <div id="card">
+        <!-- header -->
+        <div class="hdr">
+          <div class="num edit" contenteditable data-f="number">9</div>
+          <div class="title edit" contenteditable data-f="title">前腕 AP</div>
+          <div class="caption">
+            <div class="arrow">▼</div>
+            <div class="ct edit" contenteditable data-f="caption">X線<br>垂直入射</div>
+          </div>
+        </div>
+
+        <!-- main image -->
+        <div class="mainImg">
+          <div class="imgslot" data-img="mainImg"><div class="ph">クリック / ドロップで<br>メイン画像を配置</div></div>
+          <div class="cross" id="cross"><div class="vline"></div><div class="ret"></div><div class="dot"></div></div>
+        </div>
+
+        <!-- sub images (全体像・別角度 など 自由に追加) -->
+        <div class="subImages" id="subImages"></div>
+
+        <!-- sidebar -->
+        <div class="side">
+          <div class="box boxCenter">
+            <div class="bh edit" contenteditable data-f="centerTitle">中心線</div>
+            <div class="bb edit" contenteditable data-f="centerBody">前腕の長軸に垂直に入射<br>橈骨・尺骨の中央（中間線）</div>
+          </div>
+
+          <div class="box boxBucky">
+            <span class="pill">ブッキー位置</span>
+            <div class="buckyRow">
+              <div class="cassette" id="cassette"></div>
+              <div>
+                <div class="buckyOrient" id="buckyOrient">カセッテ縦置き</div>
+                <button class="miniBtn" id="orientBtn">縦／横 切替</button>
+              </div>
+              <div class="buckyAngle">角度 <span class="edit" contenteditable data-f="angle">0°</span></div>
+            </div>
+          </div>
+
+          <div class="box boxSID">
+            <div class="bh">SID</div>
+            <div class="bb"><span class="edit" contenteditable data-f="sid">100 cm</span></div>
+          </div>
+
+          <div class="box boxPoint">
+            <div class="bh">ポイント</div>
+            <div id="ptList"></div>
+            <button class="addPt" id="addPtBtn">＋ 項目を追加</button>
+          </div>
+
+          <div class="box boxRef">
+            <div class="bh edit" contenteditable data-f="refTitle">参考X線画像</div>
+            <div class="refImg"><div class="imgslot" data-img="refImg"><div class="ph">参考X線画像</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="hint">テキストは直接クリックして編集 ／ 画像枠はクリックまたはドラッグ&ドロップで差し替え ／ 「保存」で一覧に追加されます</div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" style="display:none">
+
+<script>
+/* ============== state model ============== */
+const FIELDS=["number","title","caption","centerTitle","centerBody","angle","sid","refTitle"];
+const IMGS=["mainImg","refImg"];   // 固定スロット
+function blankState(){
+  return {
+    id:null, name:"",
+    number:"", title:"", caption:"X線<br>垂直入射",
+    centerTitle:"中心線", centerBody:"", angle:"0°", sid:"100 cm", refTitle:"参考X線画像",
+    points:[""], orient:"v", showCross:true,
+    subImages:[{caption:"全体像",img:null},{caption:"別角度",img:null}],
+    mainImg:null, refImg:null
+  };
+}
+/* 他部位の雛形（医療従事者が値を確認・調整して使う前提のテンプレ） */
+const TEMPLATES=[
+  {name:"前腕 AP", number:"9", caption:"X線<br>垂直入射", centerBody:"前腕の長軸に垂直に入射<br>橈骨・尺骨の中央（中間線）", angle:"0°", sid:"100 cm", orient:"v", points:[
+    "前腕を完全伸展し、回外・回内の中間位（手掌を上に向ける）にする",
+    "橈骨と尺骨が重ならないようにする",
+    "手関節・肘関節がカセッテから外れないようにする",
+    "体幹の正中線に対して肘を直角にする"]},
+  {name:"胸部 P→A（立位）", number:"", caption:"X線<br>水平入射", centerBody:"第6〜7胸椎の高さ<br>肩甲骨下角のレベル・正中", angle:"0°", sid:"180 cm", orient:"v", points:[
+    "顎を上げ、前胸壁を検出器に密着させる",
+    "両肩甲骨を外側へ開く（手背を腰に当て肘を前へ）",
+    "両肩を下げ、肺尖部まで含める",
+    "最大吸気で息止め／体幹の回旋がないようにする"]},
+  {name:"胸部 側面（左側面）", number:"", caption:"X線<br>水平入射", centerBody:"第6〜7胸椎の高さ<br>中腋窩線", angle:"0°", sid:"180 cm", orient:"v", points:[
+    "両上肢を挙上し頭上で組む",
+    "左胸壁を検出器に密着させる",
+    "左右の後肋骨を重ねる（回旋させない）",
+    "最大吸気で息止め"]},
+  {name:"腹部 AP（臥位・KUB）", number:"", caption:"X線<br>垂直入射", centerBody:"腸骨稜上縁の高さ<br>正中", angle:"0°", sid:"100 cm", orient:"v", points:[
+    "恥骨結合〜横隔膜が入る範囲に合わせる",
+    "正中矢状面を検出器中心に合わせる",
+    "体幹の回旋がないようにする",
+    "呼気で息止め"]},
+  {name:"骨盤 AP", number:"", caption:"X線<br>垂直入射", centerBody:"上前腸骨棘と恥骨結合上縁の中点<br>正中", angle:"0°", sid:"100 cm", orient:"h", points:[
+    "両下肢を約15°内旋させる（大腿骨頸部を伸展）",
+    "左右の腸骨翼・閉鎖孔が対称になるようにする",
+    "体幹の回旋がないようにする"]},
+  {name:"膝関節 AP", number:"", caption:"X線<br>垂直入射", centerBody:"膝蓋骨下縁の約1〜2cm下<br>関節裂隙", angle:"0°", sid:"100 cm", orient:"v", points:[
+    "下肢を伸展し軽度内旋（膝蓋骨を正面に向ける）",
+    "関節裂隙を開く",
+    "大腿骨遠位〜脛骨近位が入る範囲にする"]},
+  {name:"手 P→A", number:"", caption:"X線<br>垂直入射", centerBody:"第3中手指節関節（MP関節）", angle:"0°", sid:"100 cm", orient:"v", points:[
+    "手掌を検出器に密着させ、手指を軽く開く",
+    "前腕長軸と中指を一直線にする",
+    "手関節まで含める"]},
+  {name:"足部 背底方向（AP）", number:"", caption:"X線<br>10°踵側傾斜", centerBody:"第3中足骨基部", angle:"10°", sid:"100 cm", orient:"v", points:[
+    "足底を検出器に密着させる",
+    "中心線を10°踵側へ傾ける",
+    "足根骨〜趾骨が入る範囲にする"]},
+  {name:"頸椎 側面", number:"", caption:"X線<br>水平入射", centerBody:"第4頸椎（甲状軟骨の高さ）", angle:"0°", sid:"150 cm", orient:"v", points:[
+    "両肩を下制する（下位頸椎を描出）",
+    "顎を軽く上げ、下顎枝と頸椎を重ねない",
+    "正中矢状面を検出器と平行にする"]}
+];
+function makeState(tpl){
+  const s=blankState();
+  if(tpl){
+    s.name=tpl.name; s.title=tpl.name; s.number=tpl.number||"";
+    s.caption=tpl.caption; s.centerBody=tpl.centerBody;
+    s.angle=tpl.angle; s.sid=tpl.sid; s.orient=tpl.orient||"v";
+    s.points=tpl.points.slice();
+  }
+  return s;
+}
+let state=makeState(TEMPLATES[0]);
+
+/* ============== IndexedDB ============== */
+let db;
+function openDB(){return new Promise((res,rej)=>{
+  const r=indexedDB.open("xpcards",1);
+  r.onupgradeneeded=e=>{e.target.result.createObjectStore("cards",{keyPath:"id"});};
+  r.onsuccess=e=>{db=e.target.result;res();};
+  r.onerror=e=>rej(e);
+});}
+function dbAll(){return new Promise((res)=>{
+  const out=[];const t=db.transaction("cards").objectStore("cards").openCursor();
+  t.onsuccess=e=>{const c=e.target.result;if(c){out.push(c.value);c.continue();}else res(out);};
+});}
+function dbPut(o){return new Promise((res)=>{db.transaction("cards","readwrite").objectStore("cards").put(o).onsuccess=res;});}
+function dbDel(id){return new Promise((res)=>{db.transaction("cards","readwrite").objectStore("cards").delete(id).onsuccess=res;});}
+
+/* ============== render ============== */
+const $=s=>document.querySelector(s);
+function render(){
+  FIELDS.forEach(f=>{const el=document.querySelector(`[data-f="${f}"]`);if(el&&el.innerHTML!==state[f])el.innerHTML=state[f]||"";});
+  IMGS.forEach(f=>renderImg(f));
+  renderSub();
+  renderPoints();
+  renderBucky();
+  $("#cross").classList.toggle("on",!!state.showCross);
+  $("#crossChk").checked=!!state.showCross;
+  $("#cardName").value=state.name||"";
+}
+function paintSlot(slot,val){
+  slot.innerHTML = val ? `<img src="${val}">` : `<div class="ph">${slot.dataset.ph||""}</div>`;
+}
+function renderImg(f){
+  const slot=document.querySelector(`[data-img="${f}"]`);
+  if(!slot.dataset.ph&&slot.querySelector(".ph"))slot.dataset.ph=slot.querySelector(".ph").innerHTML;
+  paintSlot(slot,state[f]);
+  bindSlot(slot, v=>{state[f]=v;});
+}
+function renderSub(){
+  const wrap=$("#subImages");wrap.innerHTML="";
+  state.subImages.forEach((it,i)=>{
+    const d=document.createElement("div");d.className="subItem";
+    d.innerHTML=`<span class="subCap edit" contenteditable></span>
+      <button class="subRm" title="この画像欄を削除">✕</button>
+      <div class="subBody"><div class="imgslot"><div class="ph">クリック / ドロップで画像</div></div></div>`;
+    const cap=d.querySelector(".subCap");cap.innerHTML=it.caption||"";
+    cap.addEventListener("input",()=>{state.subImages[i].caption=cap.innerHTML;});
+    d.querySelector(".subRm").addEventListener("click",()=>{state.subImages.splice(i,1);renderSub();});
+    const slot=d.querySelector(".imgslot");
+    slot.dataset.ph="クリック / ドロップで画像";
+    paintSlot(slot,it.img);
+    bindSlot(slot, v=>{state.subImages[i].img=v;});
+    wrap.appendChild(d);
+  });
+  const add=document.createElement("div");add.className="subAdd";add.textContent="＋";add.title="画像欄を追加";
+  add.addEventListener("click",()=>{state.subImages.push({caption:"画像",img:null});renderSub();});
+  wrap.appendChild(add);
+}
+function renderPoints(){
+  const list=$("#ptList");list.innerHTML="";
+  state.points.forEach((p,i)=>{
+    const row=document.createElement("div");row.className="pt";
+    row.innerHTML=`<span class="ck">✓</span><span class="tx edit" contenteditable></span><button class="rm" title="削除">✕</button>`;
+    row.querySelector(".tx").innerHTML=p;
+    row.querySelector(".tx").addEventListener("input",e=>{state.points[i]=e.target.innerHTML;});
+    row.querySelector(".rm").addEventListener("click",()=>{state.points.splice(i,1);if(!state.points.length)state.points=[""];renderPoints();});
+    list.appendChild(row);
+  });
+}
+function renderBucky(){
+  $("#buckyOrient").textContent = state.orient==="v" ? "カセッテ縦置き" : "カセッテ横置き";
+  const w = state.orient==="v"?46:64, h = state.orient==="v"?64:46;
+  $("#cassette").innerHTML=
+    `<svg width="${w}" height="${h}"><rect x="1" y="1" width="${w-2}" height="${h-2}" rx="3"
+       fill="#c9ced4" stroke="#8a929c"/>
+     <line x1="${w/2}" y1="1" x2="${w/2}" y2="${h-1}" stroke="#fff" stroke-dasharray="3 3"/>
+     <line x1="1" y1="${h/2}" x2="${w-1}" y2="${h/2}" stroke="#fff" stroke-dasharray="3 3"/></svg>`;
+}
+
+/* ============== editing bindings ============== */
+document.querySelectorAll("[data-f]").forEach(el=>{
+  el.addEventListener("input",()=>{state[el.dataset.f]=el.innerHTML;});
+});
+let pending=null;
+function bindSlot(slot,setVal){
+  slot.onclick=()=>{pending={setVal,slot};$("#fileInput").value="";$("#fileInput").click();};
+  slot.ondragover=e=>{e.preventDefault();slot.classList.add("drag");};
+  slot.ondragleave=()=>slot.classList.remove("drag");
+  slot.ondrop=e=>{e.preventDefault();slot.classList.remove("drag");
+    const file=e.dataTransfer.files[0];if(file)readImgTo(file,setVal,slot);};
+}
+function readImgTo(file,setVal,slot){const r=new FileReader();r.onload=()=>{setVal(r.result);paintSlot(slot,r.result);};r.readAsDataURL(file);}
+$("#fileInput").addEventListener("change",e=>{const file=e.target.files[0];if(file&&pending)readImgTo(file,pending.setVal,pending.slot);});
+
+/* ============== toolbar actions ============== */
+$("#crossChk").addEventListener("change",e=>{state.showCross=e.target.checked;$("#cross").classList.toggle("on",e.target.checked);});
+$("#orientBtn").addEventListener("click",()=>{state.orient=state.orient==="v"?"h":"v";renderBucky();});
+$("#addPtBtn").addEventListener("click",()=>{state.points.push("");renderPoints();
+  const rows=$("#ptList").querySelectorAll(".tx");rows[rows.length-1].focus();});
+$("#cardName").addEventListener("input",e=>{state.name=e.target.value;});
+document.body.classList.add("editing"); // show add/remove controls on screen
+
+/* ----- template menu ----- */
+const tplMenu=$("#tplMenu");
+function buildTplMenu(){
+  tplMenu.innerHTML='<div class="ph2">雛形から新規作成</div>';
+  TEMPLATES.forEach(t=>{
+    const b=document.createElement("button");b.textContent=t.name;
+    b.onclick=()=>{loadNew(makeState(t));};
+    tplMenu.appendChild(b);
+  });
+  const sep=document.createElement("div");sep.className="ph2";sep.textContent="その他";tplMenu.appendChild(sep);
+  const blank=document.createElement("button");blank.textContent="空白カード";
+  blank.onclick=()=>{loadNew(makeState(null));};
+  tplMenu.appendChild(blank);
+}
+function loadNew(s){state=s;render();refreshLib();tplMenu.classList.remove("open");}
+$("#newBtn").addEventListener("click",e=>{
+  e.stopPropagation();
+  const open=tplMenu.classList.contains("open");
+  if(open){tplMenu.classList.remove("open");return;}
+  const r=e.currentTarget.getBoundingClientRect();
+  tplMenu.style.left=r.left+"px";tplMenu.style.top=(r.bottom+6)+"px";
+  tplMenu.classList.add("open");
+});
+document.addEventListener("click",e=>{if(!tplMenu.contains(e.target)&&e.target.id!=="newBtn")tplMenu.classList.remove("open");});
+buildTplMenu();
+
+$("#dupBtn").addEventListener("click",()=>{state.id=null;state.name=(state.name||state.title||"カード")+" のコピー";render();});
+
+$("#saveBtn").addEventListener("click",async()=>{
+  if(!state.id)state.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  if(!state.name)state.name=state.title||"無題";
+  await dbPut(JSON.parse(JSON.stringify(state)));
+  $("#cardName").value=state.name;
+  await refreshLib();
+  flash($("#saveBtn"),"✓ 保存しました");
+});
+function flash(btn,msg){const o=btn.textContent;btn.textContent=msg;setTimeout(()=>btn.textContent=o,1200);}
+
+/* ============== library ============== */
+$("#libBtn").addEventListener("click",()=>$("#library").classList.toggle("open"));
+async function refreshLib(){
+  const list=$("#libList");const items=await dbAll();
+  items.sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
+  if(!items.length){list.innerHTML='<div id="libEmpty">まだ保存されたカードはありません。</div>';return;}
+  list.innerHTML="";
+  items.forEach(it=>{
+    const d=document.createElement("div");d.className="libItem"+(it.id===state.id?" active":"");
+    d.innerHTML=`<span class="nm">${escapeHtml(it.name||"無題")}</span><button class="del" title="削除">🗑</button>`;
+    d.querySelector(".nm").addEventListener("click",()=>{state=JSON.parse(JSON.stringify(it));render();refreshLib();});
+    d.querySelector(".del").addEventListener("click",async ev=>{ev.stopPropagation();
+      if(confirm(`「${it.name}」を削除しますか？`)){await dbDel(it.id);if(state.id===it.id)state.id=null;refreshLib();}});
+    list.appendChild(d);
+  });
+}
+function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ============== export ============== */
+$("#printBtn").addEventListener("click",()=>window.print());
+$("#pngBtn").addEventListener("click",async()=>{
+  const btn=$("#pngBtn");const o=btn.textContent;btn.textContent="生成中…";
+  const card=$("#card");
+  document.activeElement.blur&&document.activeElement.blur();
+  try{
+    const canvas=await html2canvas(card,{scale:2.4,backgroundColor:"#ffffff",useCORS:true,logging:false});
+    const a=document.createElement("a");
+    a.download=(state.name||state.title||"positioning-card").replace(/[\\/:*?"<>|]/g,"_")+".png";
+    a.href=canvas.toDataURL("image/png");a.click();
+  }catch(err){alert("PNG生成に失敗しました: "+err.message);}
+  btn.textContent=o;
+});
+
+/* ============== boot ============== */
+(async()=>{await openDB();render();await refreshLib();})();
+</script>
+</body>
+</html>
