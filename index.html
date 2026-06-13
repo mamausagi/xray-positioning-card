@@ -46,11 +46,14 @@
   /* ===== library drawer ===== */
   #libBtn{position:relative;}
   #stage{display:flex;gap:0;}
-  #library{width:0;overflow:hidden;transition:width .2s;background:#fff;border-right:1px solid var(--line);
+  #library{width:0;flex-shrink:0;overflow:hidden;transition:width .2s;background:#fff;border-right:1px solid var(--line);
     min-height:calc(100vh - 56px);}
   #library.open{width:260px;}
   #libInner{width:260px;padding:14px;}
   #libInner h2{font-size:15px;margin:0 0 10px;color:var(--navy);}
+  #libSync{display:flex;flex-direction:column;gap:6px;margin:0 0 12px;padding:0 0 12px;border-bottom:1px dashed var(--line);}
+  #libSync button{font:inherit;font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;text-align:left;}
+  #libSync button:hover{background:#f2f6fb;}
   .libItem{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;}
   .libItem:hover{background:#f2f6fb;}
   .libItem .nm{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -209,6 +212,11 @@
 <div id="stage">
   <aside id="library"><div id="libInner">
     <h2>保存したカード</h2>
+    <div id="libSync">
+      <button id="exportBtn" title="全カードを1つの.jsonに書き出し（他端末への共有用）">📤 全カード書き出し</button>
+      <button id="importBtn" title="書き出した.jsonを読み込み（同じIDのカードは上書き）">📥 読み込み</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
     <div id="libList"></div>
   </div></aside>
 
@@ -586,6 +594,39 @@ async function refreshLib(){
   });
 }
 function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ============== 全カード共有（JSONエクスポート/インポート） ============== */
+$("#exportBtn").addEventListener("click",async()=>{
+  const cards=await dbAll();
+  if(!cards.length){alert("書き出すカードがありません。");return;}
+  const data={app:"xp-positioning-card",version:1,exportedAt:new Date().toISOString(),cards};
+  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.download="xpカード_"+new Date().toISOString().slice(0,10)+".json";
+  a.href=URL.createObjectURL(blob);a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  flash($("#exportBtn"),"✓ 書き出しました："+cards.length+"件");
+});
+
+$("#importBtn").addEventListener("click",()=>$("#importFile").click());
+$("#importFile").addEventListener("change",async e=>{
+  const file=e.target.files[0];if(!file)return;
+  e.target.value="";
+  try{
+    const data=JSON.parse(await file.text());
+    const cards=Array.isArray(data)?data:data.cards;
+    if(!Array.isArray(cards)||!cards.length)throw new Error("カードデータが見つかりません");
+    if(!confirm(cards.length+"件を読み込みます。同じIDのカードは上書きされます。よろしいですか？"))return;
+    let n=0;
+    for(const c of cards){
+      if(!c||typeof c!=="object")continue;
+      if(!c.id)c.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      await dbPut(c);n++;
+    }
+    await refreshLib();
+    flash($("#importBtn"),"✓ 読み込み："+n+"件");
+  }catch(err){alert("読み込みに失敗しました: "+err.message);}
+});
 
 /* ============== export ============== */
 $("#printBtn").addEventListener("click",()=>window.print());
